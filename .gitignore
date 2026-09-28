@@ -1,0 +1,14 @@
+# Entorno
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datos privados de V (tokens, sesión de Garmin, cuaderno)
+datos/
+
+# Sistema
+.DS_Store
+Thumbs.db
