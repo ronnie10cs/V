@@ -52,9 +52,29 @@ Para probarla en tu ordenador sin publicarla: `python -m http.server 8080 -d web
 
 ---
 
-## 1. Puesta en marcha (5 minutos)
+## 1. Puesta en marcha en tu ordenador
 
-Necesitas **Python 3.10 o superior** en tu ordenador (Mac, Windows o Linux).
+**Paso 1 · Instala Python** (solo una vez), versión 3.10 o más reciente, desde <https://www.python.org/downloads/>.
+En Windows, durante la instalación marca la casilla **«Add python.exe to PATH»**.
+
+**Paso 2 · Descarga V.** En <https://github.com/ronnie10cs/V> pulsa **Code → Download ZIP** y descomprímelo donde quieras (por ejemplo, en Documentos).
+
+**Paso 3 · Ábrela con doble clic:**
+
+| Sistema | Archivo |
+|---|---|
+| Windows | `iniciar-windows.bat` |
+| Mac | `iniciar-mac.command` (la primera vez: clic derecho → **Abrir** → **Abrir**, porque macOS no conoce el archivo) |
+| Linux | `python3 iniciar.py` en una terminal |
+
+La primera vez tarda unos minutos porque instala lo que V necesita. Después te pregunta tu nombre y tu clave **gratuita** de Gemini: se abre la página <https://aistudio.google.com/apikey>, pulsas **Create API key**, la copias y la pegas en la ventana. A partir de ahí, V se abre sola en el navegador cada vez que haces doble clic. La primera vez, toca la pantalla para activar el audio.
+
+- **Cerrar V:** cierra la ventana negra (o pulsa Ctrl+C en ella).
+- **Cambiar tu nombre o tu clave:** abre el archivo `.env` de la carpeta con el Bloc de notas o TextEdit, o ejecuta `python3 iniciar.py configurar` en una terminal dentro de la carpeta (en Windows: `py iniciar.py configurar`).
+- Si haces doble clic con V ya abierta, simplemente vuelve a abrir el navegador.
+
+<details>
+<summary>Instalación manual (para quien prefiera la terminal)</summary>
 
 ```bash
 git clone https://github.com/ronnie10cs/V.git
@@ -62,18 +82,11 @@ cd V
 python3 -m venv .venv
 source .venv/bin/activate          # En Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env               # En Windows: copy .env.example .env
+python -m v                        # la primera vez te pide nombre y clave
 ```
 
-1. Consigue tu clave **gratuita** de Gemini en <https://aistudio.google.com/apikey>.
-2. Abre `.env` y pega la clave en `GEMINI_API_KEY=`. Escribe tu nombre en `V_OWNER_NAME=`.
-3. Arranca V:
-
-```bash
-python -m v
-```
-
-La consola muestra tu **enlace de dueño** (control total) y el **enlace de invitados**. Abre el tuyo en el navegador. La primera vez, toca la pantalla para activar el audio.
+`python -m v --sin-navegador` arranca sin abrir el navegador.
+</details>
 
 ### Permisos en macOS
 
