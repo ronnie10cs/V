@@ -94,3 +94,73 @@ def test_fallback_provider_switches_on_retryable_error():
 
     reply = asyncio.run(FallbackProvider([Failing(), Working()]).complete("", [], []))
     assert reply.text == "ok"
+
+
+# --- Respaldo entre modelos de Gemini ------------------------------------------
+
+from google.genai import errors  # noqa: E402
+
+
+class FakeModels:
+    """Sustituye a client.aio.models: falla con los modelos indicados."""
+
+    def __init__(self, failures):
+        self.failures = failures  # {modelo: código HTTP}
+        self.calls = []
+
+    async def generate_content(self, model, contents, config):
+        self.calls.append(model)
+        code = self.failures.get(model)
+        if code:
+            cls = errors.ServerError if code >= 500 else errors.ClientError
+            raise cls(code, {"error": {"message": "This model is currently experiencing high demand.", "status": "X"}})
+        content = types.Content(role="model", parts=[types.Part(text="[feliz] Hola.")])
+        return types.GenerateContentResponse(candidates=[types.Candidate(content=content)])
+
+
+def gemini_with(failures):
+    p = GeminiProvider("k")
+    p.retry_delay = 0
+    fake = FakeModels(failures)
+    p.client = type("C", (), {"aio": type("A", (), {"models": fake})()})()
+    return p, fake
+
+
+def test_gemini_falls_back_when_a_model_is_overloaded():
+    p, fake = gemini_with({"gemini-3.8-flash": 503, "gemini-3.7-flash": 429})
+    msg = asyncio.run(p.complete("s", [Message("user", text="hola")], []))
+    assert msg.text == "[feliz] Hola." and msg.raw["gemini_model"] == "gemini-3.5-flash"
+    assert fake.calls == ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
+    # El siguiente turno empieza por un modelo que no ha fallado hace poco.
+    asyncio.run(p.complete("s", [Message("user", text="otra")], []))
+    assert fake.calls[-1] == "gemini-3.5-flash"
+
+
+def test_gemini_keeps_the_model_within_a_turn():
+    p, fake = gemini_with({"gemini-3.8-flash": 503})
+    turn = [
+        Message("user", text="mira"),
+        Message("assistant", tool_calls=[ToolCall("v_1", "ver_pantalla", {})],
+                raw={"gemini": types.Content(role="model", parts=[]), "gemini_model": "gemini-3.7-flash"}),
+        Message("user", tool_outputs=[ToolOutput("v_1", "ver_pantalla", ToolResult("ok"))]),
+    ]
+    asyncio.run(p.complete("s", turn, []))
+    assert fake.calls == ["gemini-3.7-flash"]
+
+
+def test_gemini_explains_when_every_model_is_busy():
+    p, fake = gemini_with({m: 503 for m in p_models()})
+    with pytest.raises(ProviderError, match="mucha demanda") as exc:
+        asyncio.run(p.complete("s", [Message("user", text="hola")], []))
+    assert exc.value.retryable and len(fake.calls) == 2 * len(p_models())
+
+
+def test_gemini_invalid_key_does_not_try_other_models():
+    p, fake = gemini_with({"gemini-3.8-flash": 403})
+    with pytest.raises(ProviderError, match="clave"):
+        asyncio.run(p.complete("s", [Message("user", text="hola")], []))
+    assert fake.calls == ["gemini-3.8-flash"]
+
+
+def p_models():
+    return GeminiProvider("k").models

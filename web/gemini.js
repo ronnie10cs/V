@@ -2,6 +2,11 @@
 // La clave va en una cabecera y solo viaja a Google.
 
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
+// Modelos gratuitos, del más capaz al más ligero. Si uno está saturado o sin
+// cuota, se prueba el siguiente: cada uno tiene su propia capacidad.
+export const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+const COOLDOWN_MS = 120_000;
+const cooldown = new Map();
 export const TTS_MODEL = 'gemini-3.8-flash-tts';
 export const TTS_VOICES = {
   Charon: 'Charon · informativa y serena',
@@ -37,6 +42,7 @@ async function post(url, apiKey, body, fetchImpl) {
 
 function toError(status, message) {
   if (status === 429) return new GeminiError('Se agotó la cuota gratuita de Gemini por ahora. Espera un minuto y vuelve a intentarlo.', status);
+  if (status === 503) return new GeminiError('Gemini tiene mucha demanda ahora mismo. Inténtalo de nuevo en un minuto.', status);
   if (status === 401 || status === 403 || (status === 400 && /api key|api_key/i.test(message))) {
     return new GeminiError('Tu clave de Gemini no es válida. Revísala en Ajustes.', status);
   }
@@ -46,16 +52,50 @@ function toError(status, message) {
 }
 
 // Una llamada de conversación. `contents` son turnos de Gemini ({role, parts}) y
-// `tools` son {name, description, parameters}. Devuelve el turno del modelo tal
-// cual (con sus firmas de pensamiento) para reenviarlo en el siguiente paso.
-export async function generate({ apiKey, model = DEFAULT_MODEL, system, contents, tools = [], fetchImpl = fetch }) {
+// `tools` son {name, description, parameters}. Devuelve {content, model}: el turno
+// del modelo tal cual (con sus firmas de pensamiento, para reenviarlo) y qué
+// modelo respondió. Con `models` se fija la lista de modelos a probar.
+export async function generate({
+  apiKey, model = DEFAULT_MODEL, models, system, contents, tools = [], fetchImpl = fetch, retryDelay = 2000,
+}) {
   const body = { systemInstruction: { parts: [{ text: system }] }, contents };
   if (tools.length) {
     body.tools = [{
       functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })),
     }];
   }
-  const data = await post(`${API}/models/${encodeURIComponent(model)}:generateContent`, apiKey, body, fetchImpl);
+  const chain = models || orderedModels(model);
+  let last = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const m of chain) {
+      try {
+        const data = await post(`${API}/models/${encodeURIComponent(m)}:generateContent`, apiKey, body, fetchImpl);
+        return { content: parseCandidate(data), model: m };
+      } catch (e) {
+        // Saturado, sin cuota o inexistente: se prueba el siguiente modelo.
+        if (![404, 429, 500, 503, 504].includes(e.status)) throw e;
+        cooldown.set(m, Date.now() + COOLDOWN_MS);
+        last = e;
+      }
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, retryDelay));
+  }
+  if (last?.status === 429) throw last;
+  throw new GeminiError('Gemini tiene mucha demanda ahora mismo y ninguno de sus modelos gratuitos respondió. Inténtalo de nuevo en un minuto.', last?.status || 503);
+}
+
+export function resetCooldowns() { cooldown.clear(); }
+
+// Primero los modelos que no han fallado hace poco, en orden de preferencia.
+function orderedModels(preferred) {
+  const all = [preferred, ...FALLBACK_MODELS.filter((m) => m !== preferred)];
+  const now = Date.now();
+  const ready = all.filter((m) => (cooldown.get(m) || 0) <= now);
+  const resting = all.filter((m) => !ready.includes(m)).sort((a, b) => cooldown.get(a) - cooldown.get(b));
+  return [...ready, ...resting];
+}
+
+function parseCandidate(data) {
   const candidate = data.candidates?.[0];
   if (!candidate?.content?.parts?.length) {
     const reason = data.promptFeedback?.blockReason || candidate?.finishReason;

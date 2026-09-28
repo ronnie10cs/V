@@ -72,6 +72,7 @@ La primera vez tarda unos minutos porque instala lo que V necesita. Después te 
 - **Cerrar V:** cierra la ventana negra (o pulsa Ctrl+C en ella).
 - **Cambiar tu nombre o tu clave:** abre el archivo `.env` de la carpeta con el Bloc de notas o TextEdit, o ejecuta `python3 iniciar.py configurar` en una terminal dentro de la carpeta (en Windows: `py iniciar.py configurar`).
 - Si haces doble clic con V ya abierta, simplemente vuelve a abrir el navegador.
+- **Actualizar V:** cierra la ventana negra y haz doble clic en `actualizar-windows.bat` (o `actualizar-mac.command`). Descarga la última versión sin tocar tu clave, tus datos ni lo ya instalado.
 
 <details>
 <summary>Instalación manual (para quien prefiera la terminal)</summary>
@@ -183,7 +184,7 @@ Los invitados solo pueden hablar con V y usar el cuaderno y la calculadora. **Nu
 | `ollama` | Gratis, local | ✅ | Privacidad total. Necesita un buen ordenador (`ollama pull qwen3-vl`). |
 | `anthropic` | De pago | ✅ | Claude (`claude-opus-5`), máxima calidad de razonamiento. |
 
-Si se agota la cuota gratuita, V pasa automáticamente al proveedor de `V_FALLBACK`.
+Si un modelo de Gemini está saturado («high demand») o sin cuota, V prueba sola los demás modelos gratuitos (3.8 Flash → 3.7 Flash → 3.5 Flash → 3.5 Flash-Lite → 3.1 Flash-Lite) y deja descansar dos minutos al que falló. Si todo Gemini falla, pasa al proveedor de `V_FALLBACK` (por ejemplo `groq`, con su clave gratuita).
 
 ---
 

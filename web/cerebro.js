@@ -115,8 +115,15 @@ export class Brain {
     const specs = [...this.tools.values()].map(({ name, description, parameters }) => ({ name, description, parameters }));
     try {
       let reply = null;
+      // Dentro de un turno se sigue con el modelo que empezó: sus firmas de
+      // pensamiento solo valen para él.
+      let turnModel = null;
       for (let step = 0; step < MAX_STEPS; step++) {
-        reply = await this.generate({ apiKey, model, system, contents: this.history, tools: specs });
+        const answer = await this.generate({
+          apiKey, model, models: turnModel ? [turnModel] : undefined, system, contents: this.history, tools: specs,
+        });
+        reply = answer.content;
+        turnModel = answer.model;
         this.history.push(reply);
         const calls = reply.parts.filter((p) => p.functionCall);
         if (!calls.length) break;

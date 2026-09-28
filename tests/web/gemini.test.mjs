@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GeminiError, generate, speak } from '../../web/gemini.js';
+import { GeminiError, generate, resetCooldowns, speak } from '../../web/gemini.js';
 
 const reply = (status, body) => async (url, init) => {
   reply.last = { url, init: { ...init, body: JSON.parse(init.body) } };
@@ -13,7 +13,7 @@ test('generate envía el formato REST de Gemini', async () => {
     apiKey: 'k', system: 'sis', contents: [{ role: 'user', parts: [{ text: 'hola' }] }],
     tools: [{ name: 'calcular', description: 'd', parameters: { type: 'object', properties: {} } }], fetchImpl,
   });
-  assert.deepEqual(out, { role: 'model', parts: [{ text: 'hola' }] });
+  assert.deepEqual(out, { content: { role: 'model', parts: [{ text: 'hola' }] }, model: 'gemini-3.8-flash' });
   const { url, init } = reply.last;
   assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
   assert.equal(init.headers['x-goog-api-key'], 'k');
@@ -22,7 +22,8 @@ test('generate envía el formato REST de Gemini', async () => {
 });
 
 test('errores comprensibles', async () => {
-  await assert.rejects(generate({ apiKey: 'k', system: '', contents: [], fetchImpl: reply(429, {}) }), /cuota/);
+  await assert.rejects(generate({ apiKey: 'k', system: '', contents: [], fetchImpl: reply(429, {}), retryDelay: 0 }), /cuota/);
+  await assert.rejects(generate({ apiKey: 'k', system: '', contents: [], fetchImpl: reply(503, {}), retryDelay: 0 }), /mucha demanda/);
   await assert.rejects(
     generate({ apiKey: 'k', system: '', contents: [], fetchImpl: reply(400, { error: { message: 'API key not valid' } }) }),
     /clave de Gemini no es válida/,
@@ -32,7 +33,7 @@ test('errores comprensibles', async () => {
 
 test('respuesta bloqueada', async () => {
   const out = await generate({ apiKey: 'k', system: '', contents: [], fetchImpl: reply(200, { promptFeedback: { blockReason: 'SAFETY' } }) });
-  assert.match(out.parts[0].text, /SAFETY/);
+  assert.match(out.content.parts[0].text, /SAFETY/);
 });
 
 test('speak lee el audio de la Interactions API y añade cabecera WAV si falta', async () => {
@@ -44,4 +45,30 @@ test('speak lee el audio de la Interactions API y añade cabecera WAV si falta',
   assert.equal(reply.last.url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
   assert.deepEqual(reply.last.init.body.generation_config, { speech_config: [{ voice: 'Charon' }] });
   await assert.rejects(speak({ apiKey: 'k', text: 'x', fetchImpl: reply(200, {}) }), /no devolvió audio/);
+});
+
+test('si un modelo está saturado, prueba el siguiente y lo recuerda', async () => {
+  resetCooldowns();
+  const tried = [];
+  const fetchImpl = async (url) => {
+    const model = url.match(/models\/([^:]+):/)[1];
+    tried.push(model);
+    const busy = model === 'gemini-3.8-flash' || model === 'gemini-3.7-flash';
+    const body = busy ? { error: { message: 'This model is currently experiencing high demand.' } }
+      : { candidates: [{ content: { role: 'model', parts: [{ text: 'ok' }] } }] };
+    return new Response(JSON.stringify(body), { status: busy ? 503 : 200 });
+  };
+  const out = await generate({ apiKey: 'k', system: '', contents: [], fetchImpl, retryDelay: 0 });
+  assert.equal(out.model, 'gemini-3.5-flash');
+  assert.deepEqual(tried, ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash']);
+  tried.length = 0;
+  await generate({ apiKey: 'k', system: '', contents: [], fetchImpl, retryDelay: 0 });
+  assert.equal(tried[0], 'gemini-3.5-flash');
+});
+
+test('una clave inválida no prueba otros modelos', async () => {
+  let n = 0;
+  const fetchImpl = async () => { n++; return new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 400 }); };
+  await assert.rejects(generate({ apiKey: 'k', system: '', contents: [], fetchImpl, retryDelay: 0 }), /clave/);
+  assert.equal(n, 1);
 });

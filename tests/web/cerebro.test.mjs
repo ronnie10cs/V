@@ -16,7 +16,7 @@ function scripted(...steps) {
     calls.push(structuredClone(req));
     const step = steps.shift();
     if (step instanceof Error) throw step;
-    return step ?? say('[neutral] (sin guion)');
+    return { content: step ?? say('[neutral] (sin guion)'), model: calls.length === 1 ? 'modelo-a' : 'modelo-b' };
   };
   return { generate, calls };
 }
@@ -126,4 +126,12 @@ test('personalidad, etiquetas y texto hablado', () => {
   assert.equal(speakable('**Hola** mira [esto](https://x.com) y `código`\n- punto [feliz]'), 'Hola mira esto y código punto');
   assert.ok(addressedToV('¿verdad, V?'));
   assert.ok(!addressedToV('La vitamina C'));
+});
+
+test('dentro de un turno se mantiene el modelo que empezó', async () => {
+  const g = scripted(call('calcular', { expresion: '1+1' }), say('[neutral] 2.'));
+  const brain = new Brain({ generate: g.generate, tools: [calcTool] });
+  await brain.respond({ speaker: 'R', text: 'suma', system: 's', model: 'gemini-3.8-flash' });
+  assert.equal(g.calls[0].models, undefined);
+  assert.deepEqual(g.calls[1].models, ['modelo-a']);
 });
