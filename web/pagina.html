@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>V</title>
+  <meta name="description" content="V, tu asistente de investigación con voz, cara y visión, directamente en el navegador">
+  <meta name="theme-color" content="#07090f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="V">
+  <link rel="manifest" href="pagina.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">V</span>
+        <span id="status-text" class="status">Preparando…</span>
+      </div>
+      <nav class="top-actions">
+        <button id="mode-btn" class="chip" title="Cambiar entre asistente y debate">Asistente</button>
+        <button id="people-btn" class="icon-btn" data-icon="users" title="Quién participa"><span id="people-count">1</span></button>
+        <button id="notebook-btn" class="icon-btn" data-icon="book" title="Cuaderno de hipótesis"></button>
+        <button id="settings-btn" class="icon-btn" data-icon="gear" title="Ajustes"></button>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="stage" id="stage">
+        <canvas id="face" aria-label="Cara de V"></canvas>
+        <div id="tool-feed" class="tool-feed" aria-live="polite"></div>
+        <p id="caption" class="caption" aria-live="polite"></p>
+        <div id="pip" class="pip" hidden>
+          <video id="video" playsinline muted autoplay></video>
+          <canvas id="overlay"></canvas>
+          <div class="pip-bar">
+            <span id="gesture-label"></span>
+            <button id="flip-btn" class="mini" data-icon="flip" title="Cambiar de cámara"></button>
+          </div>
+        </div>
+        <video id="screen-video" playsinline muted hidden></video>
+        <button id="stop-btn" class="stop-btn" data-icon="stop" title="Callar a V" hidden><span>Silencio</span></button>
+        <button id="focus-btn" class="corner-btn" data-icon="expand" title="Modo cara (pantalla completa)"></button>
+      </section>
+
+      <section class="chat">
+        <div id="log" class="log" aria-live="polite"></div>
+        <div id="speakers" class="speakers" hidden aria-label="Quién habla ahora"></div>
+        <form id="composer" class="composer" autocomplete="off">
+          <button type="button" id="cam-btn" class="round" data-icon="camera" title="Cámara"></button>
+          <button type="button" id="hands-btn" class="round" data-icon="hand" title="Seguimiento de manos"></button>
+          <button type="button" id="screen-btn" class="round" data-icon="screen" title="Compartir pantalla con V"></button>
+          <textarea id="input" rows="1" placeholder="Habla o escribe a V…" enterkeyhint="send"></textarea>
+          <button type="button" id="ask-btn" class="round accent debate-only" data-icon="scale" title="Que opine V"></button>
+          <button type="button" id="mic-btn" class="round" data-icon="mic" title="Hablar"></button>
+          <button type="submit" id="send-btn" class="round primary" data-icon="send" title="Enviar"></button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <aside id="notebook" class="drawer" hidden>
+    <header><h2>Cuaderno de hipótesis</h2><button class="close icon-btn" data-icon="close" title="Cerrar"></button></header>
+    <div id="notebook-list" class="drawer-body"></div>
+    <footer><button id="export-md" class="btn">Descargar en Markdown</button></footer>
+  </aside>
+
+  <aside id="people" class="drawer" hidden>
+    <header><h2>Quién participa</h2><button class="close icon-btn" data-icon="close" title="Cerrar"></button></header>
+    <div class="drawer-body">
+      <p class="hint">Para debatir desde este dispositivo, añade a tus amigos y toca su nombre antes de que hablen. Así V sabe quién dice qué.</p>
+      <ul id="people-list" class="people"></ul>
+      <form id="add-person" class="row">
+        <input id="person-input" maxlength="24" placeholder="Nombre de un amigo" aria-label="Nombre de un amigo">
+        <button class="btn" type="submit">Añadir</button>
+      </form>
+    </div>
+  </aside>
+
+  <aside id="settings" class="drawer" hidden>
+    <header><h2>Ajustes</h2><button class="close icon-btn" data-icon="close" title="Cerrar"></button></header>
+    <div class="drawer-body">
+      <div class="field">
+        <label for="name-input">Tu nombre</label>
+        <input id="name-input" maxlength="24" placeholder="¿Cómo te llamas?">
+      </div>
+      <div class="field">
+        <label for="key-input">Clave de Gemini</label>
+        <input id="key-input" type="password" autocomplete="off" placeholder="AIza…">
+        <p class="hint">Gratis en <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Se guarda solo en este navegador y solo se envía a Google.</p>
+      </div>
+      <div class="field">
+        <label for="model-select">Cerebro</label>
+        <select id="model-select"></select>
+      </div>
+      <div class="field">
+        <label for="voice-select">Voz</label>
+        <select id="voice-select"></select>
+      </div>
+      <label class="switch"><input type="checkbox" id="voice-toggle"><span>Voz de V activada</span></label>
+      <label class="switch"><input type="checkbox" id="handsfree-toggle"><span>Manos libres: escuchar después de que V hable</span></label>
+      <button id="reset-btn" class="btn ghost">Reiniciar conversación</button>
+      <p class="hint">Gestos con la mano: ✋ silencia a V · ✌️ empieza a escuchar.</p>
+      <p class="hint">¿Quieres que V abra y cierre apps de tu ordenador o lea tu Garmin? Eso lo hace la versión completa: <code>python -m v</code> (mira el README).</p>
+      <button id="forget-btn" class="btn ghost">Borrar mi clave de este navegador</button>
+    </div>
+  </aside>
+
+  <div id="setup" class="modal" hidden>
+    <form id="setup-form" class="card">
+      <span class="logo big">V</span>
+      <h2>Hola, soy V</h2>
+      <p class="hint">Tu asistente de investigación, con voz, cara y visión. Para pensar uso Gemini, de Google, que es gratis.</p>
+      <input id="setup-name" maxlength="24" placeholder="Tu nombre" aria-label="Tu nombre">
+      <input id="setup-key" type="password" autocomplete="off" placeholder="Tu clave de Gemini (AIza…)" aria-label="Clave de Gemini" required>
+      <p class="hint"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Consigue tu clave gratis aquí</a> (un minuto, con tu cuenta de Google). Se guarda solo en este navegador.</p>
+      <p id="setup-error" class="error-text"></p>
+      <button class="btn primary" type="submit">Empezar</button>
+    </form>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="pagina.js"></script>
+</body>
+</html>

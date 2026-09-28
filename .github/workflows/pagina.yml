@@ -1,0 +1,40 @@
+# Publica V en la web (web/pagina.html) con GitHub Pages.
+# Antes de la primera vez: Settings → Pages → Source: «GitHub Actions».
+name: Publicar V en la web
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/pagina.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar la página
+        run: |
+          mkdir _site
+          cp -r web/. _site/
+          # En la web, la portada es V en el navegador (index.html es la app del servidor).
+          cp web/pagina.html _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
